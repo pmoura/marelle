@@ -42,15 +42,17 @@ marelle_search_path('deps').
 main :-
     ( current_prolog_flag(os_argv, Argv) ->
         true
-	; current_prolog_flag(argv, Argv)
-	),
-    append([_,_,_,_,_,_], Args, Argv),
+    ;
+        current_prolog_flag(argv, Argv)
+    ),
+    append([_, _, _, _, _, _], Rest, Argv),
     detect_platform,
     load_deps,
-	( Args = [Command|Rest] ->
-	   main(Command, Rest)
-	;  usage
-	).
+    ( Rest = [Command|SubArgs] ->
+        main(Command, SubArgs)
+    ;
+        usage
+    ).
 
 main(scan, Rest) :-
     ( Rest = ['--all'] ->
