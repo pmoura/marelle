@@ -22,17 +22,22 @@ installs_with_apt(P, P) :- installs_with_apt(P).
 installs_with_apt(P, _, AptName) :- installs_with_apt(P, AptName).
 
 depends(P, linux(_), ['apt-get-update']) :-
+    isfile('/usr/bin/apt-get'),
     installs_with_apt(P, _, _).
 
 :- dynamic apt_updated/0.
 
 pkg('apt-get-update').
-met('apt-get-update', linux(_)) :- apt_updated.
+met('apt-get-update', linux(_)) :-
+    isfile('/usr/bin/apt-get'),
+    apt_updated.
 meet('apt-get-update', linux(_)) :-
-    bash('sudo apt-get update'),
+    isfile('/usr/bin/apt-get'),
+    sh('sudo apt-get update'),
     assertz(apt_updated).
 
 met(P, linux(Codename)) :-
+    isfile('/usr/bin/apt-get'),
     installs_with_apt(P, Codename, PkgName), !,
     ( is_list(PkgName) ->
         maplist(check_dpkg, PkgName)
@@ -41,6 +46,7 @@ met(P, linux(Codename)) :-
     ).
 
 meet(P, linux(Codename)) :-
+    isfile('/usr/bin/apt-get'),
     installs_with_apt(P, Codename, PkgName), !,
     ( is_list(PkgName) ->
         maplist(install_apt, PkgName)
@@ -50,4 +56,8 @@ meet(P, linux(Codename)) :-
 
 check_dpkg(PkgName) :-
     join(['dpkg -s ', PkgName, ' >/dev/null 2>/dev/null'], Cmd),
-    bash(Cmd).
+    sh(Cmd).
+
+install_apt(Name) :-
+    sudo_or_empty(Sudo),
+    sh([Sudo, 'apt-get install -y ', Name]).

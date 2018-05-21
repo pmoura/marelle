@@ -1,5 +1,8 @@
 # Marelle ("hopscotch")
 
+[![Build Status](https://travis-ci.org/larsyencken/marelle.png)](https://travis-ci.org/larsyencken/marelle) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/larsyencken/marelle)
+
+
 Test-driven system administration in SWI-Prolog, in the style of [Babushka](https://github.com/benhoskings/babushka).
 
 Marelle uses [logic programming](https://en.wikipedia.org/wiki/Logic_programming) to describe system targets and rules by which these targets can be met. Prolog's built-in search mechanism makes writing and using these dependencies elegant. Anecdotally, writing deps for Marelle has the feel of teaching it about types of packages, rather than the feel of writing package templates.
@@ -8,7 +11,7 @@ Marelle uses [logic programming](https://en.wikipedia.org/wiki/Logic_programming
 
 ## Current status
 
-Working and in active use.
+Experimental but working.
 
 ## Features
 
@@ -28,22 +31,25 @@ It also has some interesting differences:
 
 ### Quickstart
 
-Run the bootstrap script:
+Pick a bootstrap script from the options below. If you're not sure, choose the stable version.
 
-```bash
-bash -c "`curl https://raw.github.com/larsyencken/marelle/master/bootstrap.sh`"
-```
+Version | Bootstrap command
+------- | -----------------
+_0.1.0 (stable)_ | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/larsyencken/marelle/versions/0.1.0/bootstrap.sh)"`
+_master (dev)_ | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/larsyencken/marelle/master/bootstrap.sh)"`
 
-This will install marelle as the current user, putting the executable in `~/.local/bin/marelle`.
+This will install marelle for all users, putting the executable in `/usr/local/bin/marelle`.
 
 ### Manual version
 
 1. Get Prolog
     - On OS X, with Homebrew: `brew install swi-prolog`
     - On Ubuntu, with apt-get: `sudo apt-get install swi-prolog-nox`
+    - On FreeBSD, with pkgng: `sudo pkg install swi-pl`
 2. Get git
     - On OS X, with Homebrew: `brew install git`
     - On Ubuntu, with apt-get: `sudo apt-get install git`
+    - On FreeBSD, with pkgng: `sudo pkg install git`
 3. Clone and set up marelle
 
 ```bash
@@ -54,10 +60,15 @@ git clone https://github.com/larsyencken/marelle ~/.local/marelle
 # set up an executable in ~/.local/bin
 mkdir -p ~/.local/bin
 cat >~/.local/bin/marelle <<EOF
-#!/bin/bash
-exec swipl -q -t main -s ~/.local/marelle/marelle.pl "$@"
+#!/bin/sh
+exec swipl -q -t main -s ~/.local/marelle/marelle.pl "\$@"
 EOF
 chmod a+x ~/.local/bin/marelle
+
+# add ~/.local/bin to your PATH
+# (the exact commands depend on the shell you use)
+echo 'export PATH=~/.local/bin:$PATH' >>~/.profile
+source ~/.profile
 ```
 
 ## Writing deps
@@ -76,7 +87,7 @@ met(python, linux(_)) :- exists_file('/usr/bin/python').
 % we can install by running apt-get in shell
 meet(python, linux(_)) :-
     % could also use: install_apt('python-dev')
-    bash('sudo apt-get install -y python-dev').
+    sh('sudo apt-get install -y python-dev').
 ```
 
 To install python on a machine, I'd now run `marelle meet python`.
@@ -126,3 +137,7 @@ Like both Babushka and Babashka, Marelle looks for deps in `~/.marelle/deps` and
 ## Examples
 
 See my [marelle-deps](https://github.com/larsyencken/marelle-deps) repo for working examples.
+
+## Developing
+
+Run `make test` to run the test suite.

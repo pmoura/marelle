@@ -11,7 +11,7 @@
 %
 %  pkg(python).
 %  met(python, _) :- which(python, _).
-%  meet(python, osx) :- bash('brew install python').
+%  meet(python, osx) :- sh('brew install python').
 %
 :- multifile pkg/1.
 :- multifile meet/2.
@@ -19,6 +19,8 @@
 :- multifile depends/3.
 
 :- dynamic platform/1.
+
+marelle_version('dev').
 
 % pkg(?Pkg) is nondet.
 %   Is this a defined package name?
@@ -110,6 +112,9 @@ main(profile, [Cmd|Rest]) :- !, profile(main(Cmd, Rest)).
 
 % time the command and count inferences
 main(time, [Cmd|Rest]) :- !, time(main(Cmd, Rest)).
+
+main(version, []) :-
+    marelle_version(V), writeln(V).
 
 main(_, _) :- !, usage.
 
@@ -240,6 +245,7 @@ usage :-
     writeln('       marelle met [-q] <target>'),
     writeln('       marelle meet <target>'),
     writeln('       marelle platform'),
+    writeln('       marelle version'),
     writeln(''),
     writeln('Detect and meet dependencies. Searches ~/.marelle/deps and the folder'),
     writeln('marelle-deps in the current directory if it exists.').
@@ -248,8 +254,7 @@ usage :-
 %   See if a command is available in the current PATH, and return the path to
 %   that command.
 which(Command, Path) :-
-    join(['which ', Command], C),
-    bash_output(C, Path).
+    sh_output(['which ', Command], Path).
 
 % which(+Command) is semidet.
 %   See if a command is available in the current PATH.
@@ -263,12 +268,18 @@ platform(_) :- fail.
 % detect_platform is det.
 %   Sets platform/1 with the current platform.
 detect_platform :-
-    bash_output('uname -s', OS),
+    sh_output('uname -s', OS),
     ( OS = 'Linux' ->
-        linux_codename(Codename),
-        Platform = linux(Codename)
+        linux_name(Name),
+        Platform = linux(Name)
     ; OS = 'Darwin' ->
         Platform = osx
+    ; OS = 'FreeBSD' ->
+        Platform = freebsd
+    ; OS = 'OpenBSD' ->
+        Platform = openbsd
+    ; OS = 'NetBSD' ->
+        Platform = netbsd
     ;
         Platform = unknown
     ),
@@ -277,16 +288,21 @@ detect_platform :-
 
 join(L, R) :- atomic_list_concat(L, R).
 
-% linux_codename(-Codename).
-%   Determine the codename of the linux release (e.g. precise).
-linux_codename(Codename) :-
-    ( ( which('lsb_release', _),
-        bash_output('lsb_release -c | sed \'s/^[^:]*:\\s//g\'', Codename)
-      ) ->
-      true
-    ;
-        Codename = unknown
-    ).
+% linux_name(-Name) is det.
+%   Determine the codename of the linux release (e.g. precise). If there can
+%   be no codename found, determine the short distro name (e.g. arch).
+%   Otherwise codename is unknown.
+linux_name(Name) :-
+    which('lsb_release', _),
+    sh_output('lsb_release -c | sed \'s/^[^:]*:\\s//g\'', Name),
+    dif(Name,'n/a'), !.
+linux_name(Name) :-
+    which('lsb_release', _),
+    sh_output('lsb_release -i | sed \'s/[A-Za-z ]*:\t//\'', CapitalName),
+    dif(CapitalName,'n/a'),
+    downcase_atom(CapitalName, Name), !.
+linux_name(unknown).
+
 
 writeln_indent(L, D) :- write_indent(D), writeln(L).
 writeln_star(L) :- write(L), write(' *\n').
@@ -302,26 +318,9 @@ write_indent(D) :-
 writepkg(pkg(P, met)) :- writeln_star(P).
 writepkg(pkg(P, unmet)) :- writeln(P).
 
-install_apt(Name) :-
-    ( bash_output('whoami', root) ->
-        Sudo = ''
-    ;
-        Sudo = 'sudo '
-    ),
-    join([Sudo, 'apt-get install -y ', Name], Cmd),
-    bash(Cmd).
-
-install_brew(Name) :-
-    join(['brew install ', Name], Cmd),
-    bash(Cmd).
-
 home_dir(D0, D) :-
     getenv('HOME', Home),
     join([Home, '/', D0], D).
-
-git_clone(Source, Dest) :-
-    join(['git clone --recursive ', Source, ' ', Dest], Cmd),
-    bash(Cmd).
 
 %  command packages: met when their command is in path
 :- multifile command_pkg/1.
@@ -338,39 +337,49 @@ writeln_stderr(S) :-
     write(Stream, '\n'),
     close(Stream).
 
-% bash(+Cmd, -Code) is semidet.
+join_if_list(Input, Output) :-
+    ( is_list(Input) ->
+        join(Input, Output)
+    ;
+        Output = Input
+    ).
+
+% sh(+Cmd, -Code) is semidet.
 %   Execute the given command in shell. Catch signals in the subshell and
 %   cause it to fail if CTRL-C is given, rather than becoming interactive.
 %   Code is the exit code of the command.
-bash(Cmd0, Code) :-
-    ( is_list(Cmd0) ->
-        join(Cmd0, Cmd)
-    ;
-        Cmd = Cmd0
-    ),
+sh(Cmd0, Code) :-
+    join_if_list(Cmd0, Cmd),
     catch(shell(Cmd, Code), _, fail).
 
-% bash(+Cmd) is semidet.
-%   Run the command in shell and fail unless it returns with exit code 0.
-bash(Cmd) :- bash(Cmd, 0).
+bash(Cmd0, Code) :- sh(Cmd0, Code).
 
-% bash_output(+Cmd, -Output) is semidet.
+% sh(+Cmd) is semidet.
+%   Run the command in shell and fail unless it returns with exit code 0.
+sh(Cmd) :- sh(Cmd, 0).
+
+bash(Cmd0) :- sh(Cmd0).
+
+% sh_output(+Cmd, -Output) is semidet.
 %   Run the command in shell and capture its stdout, trimming the last
 %   newline. Fails if the command doesn't return status code 0.
-bash_output(Cmd, Output) :-
+sh_output(Cmd0, Output) :-
     tmp_file(syscmd, TmpFile),
+    join_if_list(Cmd0, Cmd),
     join([Cmd, ' >', TmpFile], Call),
-    bash(Call),
+    sh(Call),
     read_file_to_codes(TmpFile, Codes, []),
     atom_codes(Raw, Codes),
     atom_concat(Output, '\n', Raw).
+
+bash_output(Cmd, Output) :- sh_output(Cmd, Output).
 
 :- dynamic marelle_has_been_updated/0.
 
 pkg(selfupdate).
 met(selfupdate, _) :- marelle_has_been_updated.
 meet(selfupdate, _) :-
-    bash('cd ~/.local/marelle && git pull'),
+    sh('cd ~/.local/marelle && git pull'),
     assertz(marelle_has_been_updated).
 
 :- include('00-util').
@@ -381,4 +390,6 @@ meet(selfupdate, _) :-
 :- include('05-git').
 :- include('06-meta').
 :- include('07-managed').
+:- include('08-pacman').
+:- include('09-freebsd').
 :- include('sudo').

@@ -1,12 +1,9 @@
 #!/bin/bash -e
 #
-#  bootstrap.sh
+#  bootstrap_dev.sh
 #
-#  Install marelle for all users.
+#  Install marelle for the current user only.
 #
-
-DEST_DIR=/usr/local/share/marelle
-DEST_BIN=/usr/local/bin/marelle
 
 function has_exec() {
   [ ! -z "$(which $1)" ]
@@ -114,16 +111,29 @@ function check_in_path() {
 
 function checkout_marelle() {
   echo 'Trying to check out marelle'
-  sudo mkdir -p "${DEST_DIR}"
-  cd "$(dirname ${DEST_DIR})"
-  sudo git clone -b versions/0.1.0 https://github.com/larsyencken/marelle
-  sudo sh -c "cat > ${DEST_BIN}" <<EOF
+  mkdir -p ~/.local/bin
+  git clone https://github.com/larsyencken/marelle ~/.local/marelle
+  cat >~/.local/bin/marelle <<EOF
 #!/bin/sh
-exec swipl -q -t main -s "${DEST_DIR}/marelle.pl" "\$@"
+exec swipl -q -t main -s ~/.local/marelle/marelle.pl "\$@"
 EOF
-  sudo chmod a+x "${DEST_BIN}"
-  if [ ! -d "${DEST_DIR}" -o ! -x "${DEST_BIN}" ]; then
+  chmod a+x ~/.local/bin/marelle
+  if [ ! -d ~/.local/marelle -o ! -x ~/.local/bin/marelle ]; then
     bail "Ran into a problem checking out marelle"
+  fi
+}
+
+function put_marelle_in_path() {
+  echo 'Checking if marelle is in PATH'
+  if [ -f ~/.bash_profile ]; then
+    echo 'export PATH=~/.local/bin:$PATH' >>~/.bash_profile
+    source ~/.bash_profile
+  elif [ -f ~/.profile ]; then
+    echo 'export PATH=~/.local/bin:$PATH' >>~/.profile
+    source ~/.profile
+  fi
+  if missing_exec marelle; then
+    bail "Couldn't set up marelle in PATH. Add ~/.local/bin to your PATH in your shell's rc."
   fi
 }
 
@@ -140,14 +150,14 @@ function main() {
   fi
   echo 'Prolog: OK'
 
-  if [ ! -d "${DEST_DIR}" ]; then
+  if [ ! -d ~/.local/marelle ]; then
     checkout_marelle
   fi
   echo 'Marelle: OK'
 
   hash -r
   if missing_exec marelle; then
-    bail "Couldn't setup marelle in PATH"
+    put_marelle_in_path
   fi
   echo 'Marelle in PATH: OK'
   echo 'DONE'
